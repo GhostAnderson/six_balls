@@ -4,4 +4,6 @@ export * from './piece';
 export * from './gravity';
 export * from './patterns';
 export * from './game-engine';
+export * from './attacks';
+export * from './fall';
 export * from './rng';

@@ -3,6 +3,7 @@ import {
   rotatePiece,
   canPlacePiece,
   landPiece,
+  applyAttacks,
   createPieceAtSpawn,
   isGameOver,
   createEmptyGrid,
@@ -95,15 +96,20 @@ function handlePieceLand(gameState: GameState, playerIndex: number, piece: Trian
   const player = gameState.players[playerIndex];
   const opponentIndex = playerIndex === 0 ? 1 : 0;
   const { grid: processedGrid, attacks } = landPiece(player.grid, piece);
-  const dead = isGameOver(processedGrid);
-  const newPlayers = [...gameState.players] as [PlayerState, PlayerState];
+  // Queued attacks rain down after the landing settles
+  const finalGrid = player.attackQueue.length > 0
+    ? applyAttacks(processedGrid, player.attackQueue)
+    : processedGrid;
   const nextIndex = player.pieceIndex + 1;
+  const dead = isGameOver(finalGrid, gameState.pieceSequence[nextIndex]);
+  const newPlayers = [...gameState.players] as [PlayerState, PlayerState];
 
   newPlayers[playerIndex] = {
-    ...player, grid: processedGrid,
+    ...player, grid: finalGrid,
     currentPiece: dead ? null : gameState.pieceSequence[nextIndex],
     nextPiece: gameState.pieceSequence[nextIndex + 1],
     pieceIndex: nextIndex,
+    attackQueue: [],
     isAlive: !dead,
   };
 

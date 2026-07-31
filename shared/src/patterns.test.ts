@@ -39,6 +39,24 @@ describe('findSixConnected', () => {
     expect(matches[0].positions).toHaveLength(6);
   });
 
+  it('finds a group even when it borders an earlier-scanned group of another color', () => {
+    const grid = createEmptyGrid();
+    // A green ball scanned first (lowest scan order)...
+    setBall(grid, { row: 0, col: 0 }, { color: 'green', position: { row: 0, col: 0 } } as Ball);
+    // ...whose BFS must not swallow the neighboring red ball at (0,1).
+    // Red group: 5 in a row + 1 above = 6 connected (not a line, not a pyramid).
+    const reds = [
+      { row: 0, col: 1 }, { row: 0, col: 2 }, { row: 0, col: 3 },
+      { row: 0, col: 4 }, { row: 0, col: 5 }, { row: 1, col: 1 },
+    ];
+    reds.forEach(pos => setBall(grid, pos, { color: 'red', position: pos } as Ball));
+
+    const matches = findSixConnected(grid);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].color).toBe('red');
+    expect(matches[0].positions).toHaveLength(6);
+  });
+
   it('does not match different colors', () => {
     const grid = createEmptyGrid();
     setBall(grid, { row: 0, col: 0 }, { color: 'red', position: { row: 0, col: 0 } } as Ball);
@@ -49,6 +67,64 @@ describe('findSixConnected', () => {
     setBall(grid, { row: 0, col: 5 }, { color: 'blue', position: { row: 0, col: 5 } } as Ball);
     const matches = findSixConnected(grid);
     expect(matches).toEqual([]);
+  });
+});
+
+describe('findPyramid geometry', () => {
+  it('finds a true centered point-up pyramid on an even base row', () => {
+    const grid = createEmptyGrid();
+    // Base row 0 (even): cols 3,4,5 → x 3,4,5. Middle row 1: cols 3,4 → x 3.5,4.5.
+    // Centered apex row 2: col 4 → x 4.
+    const cells = [
+      { row: 0, col: 3 }, { row: 0, col: 4 }, { row: 0, col: 5 },
+      { row: 1, col: 3 }, { row: 1, col: 4 },
+      { row: 2, col: 4 },
+    ];
+    cells.forEach(pos => setBall(grid, pos, { color: 'red', position: pos } as Ball));
+    const matches = findPyramid(grid);
+    expect(matches).toHaveLength(1);
+    expect(matches[0].positions).toHaveLength(6);
+  });
+
+  it('finds a true centered point-up pyramid on an odd base row', () => {
+    const grid = createEmptyGrid();
+    // Base row 1 (odd): cols 2,3,4 → x 2.5,3.5,4.5. Middle row 2: cols 3,4 → x 3,4.
+    // Centered apex row 3 (odd): col 3 → x 3.5.
+    const cells = [
+      { row: 1, col: 2 }, { row: 1, col: 3 }, { row: 1, col: 4 },
+      { row: 2, col: 3 }, { row: 2, col: 4 },
+      { row: 3, col: 3 },
+    ];
+    cells.forEach(pos => setBall(grid, pos, { color: 'blue', position: pos } as Ball));
+    const matches = findPyramid(grid);
+    expect(matches).toHaveLength(1);
+  });
+
+  it('finds a true centered point-down pyramid with an even apex row', () => {
+    const grid = createEmptyGrid();
+    // Apex row 0 (even): col 4 → x 4. Middle row 1: cols 3,4 → x 3.5,4.5.
+    // Base row 2 (even): cols 3,4,5 → x 3,4,5.
+    const cells = [
+      { row: 0, col: 4 },
+      { row: 1, col: 3 }, { row: 1, col: 4 },
+      { row: 2, col: 3 }, { row: 2, col: 4 }, { row: 2, col: 5 },
+    ];
+    cells.forEach(pos => setBall(grid, pos, { color: 'green', position: pos } as Ball));
+    const matches = findPyramid(grid);
+    expect(matches).toHaveLength(1);
+  });
+
+  it('detects the pyramid inside a larger 7-ball same-color shape', () => {
+    const grid = createEmptyGrid();
+    const cells = [
+      { row: 0, col: 3 }, { row: 0, col: 4 }, { row: 0, col: 5 },
+      { row: 1, col: 3 }, { row: 1, col: 4 },
+      { row: 2, col: 4 },
+      { row: 0, col: 6 },  // 7th ball attached to the base
+    ];
+    cells.forEach(pos => setBall(grid, pos, { color: 'purple', position: pos } as Ball));
+    const patterns = findPatterns(grid);
+    expect(patterns.some(m => m.type === 'pyramid')).toBe(true);
   });
 });
 
@@ -177,7 +253,7 @@ describe('findPyramid', () => {
     setBall(grid, { row: 0, col: 5 }, { color: 'red', position: { row: 0, col: 5 } });
     setBall(grid, { row: 1, col: 3 }, { color: 'red', position: { row: 1, col: 3 } });
     setBall(grid, { row: 1, col: 4 }, { color: 'red', position: { row: 1, col: 4 } });
-    setBall(grid, { row: 2, col: 3 }, { color: 'red', position: { row: 2, col: 3 } });
+    setBall(grid, { row: 2, col: 4 }, { color: 'red', position: { row: 2, col: 4 } });
 
     const matches = findPyramid(grid);
     expect(matches).toHaveLength(1);
@@ -195,9 +271,9 @@ describe('findPyramid', () => {
     setBall(grid, { row: 2, col: 3 }, { color: 'blue', position: { row: 2, col: 3 } });
     setBall(grid, { row: 2, col: 4 }, { color: 'blue', position: { row: 2, col: 4 } });
     setBall(grid, { row: 2, col: 5 }, { color: 'blue', position: { row: 2, col: 5 } });
+    setBall(grid, { row: 1, col: 3 }, { color: 'blue', position: { row: 1, col: 3 } });
     setBall(grid, { row: 1, col: 4 }, { color: 'blue', position: { row: 1, col: 4 } });
-    setBall(grid, { row: 1, col: 5 }, { color: 'blue', position: { row: 1, col: 5 } });
-    setBall(grid, { row: 0, col: 5 }, { color: 'blue', position: { row: 0, col: 5 } });
+    setBall(grid, { row: 0, col: 4 }, { color: 'blue', position: { row: 0, col: 4 } });
 
     const matches = findPyramid(grid);
     expect(matches).toHaveLength(1);
@@ -212,25 +288,25 @@ describe('findPyramid', () => {
     setBall(grid, { row: 4, col: 3 }, { color: 'red', position: { row: 4, col: 3 } });
     setBall(grid, { row: 5, col: 1 }, { color: 'red', position: { row: 5, col: 1 } });
     setBall(grid, { row: 5, col: 2 }, { color: 'red', position: { row: 5, col: 2 } });
-    setBall(grid, { row: 6, col: 1 }, { color: 'red', position: { row: 6, col: 1 } });
+    setBall(grid, { row: 6, col: 2 }, { color: 'red', position: { row: 6, col: 2 } });
     const matches = findPyramid(grid);
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });
 
   it('finds both orientations simultaneously', () => {
     const grid = createEmptyGrid();
-    // Point-up red at row 0
+    // Point-up red at row 0 (base cols 0-2, apex centered at col 1)
     for (let c = 0; c < 3; c++) setBall(grid, { row: 0, col: c }, { color: 'red', position: { row: 0, col: c } });
     setBall(grid, { row: 1, col: 0 }, { color: 'red', position: { row: 1, col: 0 } });
     setBall(grid, { row: 1, col: 1 }, { color: 'red', position: { row: 1, col: 1 } });
-    setBall(grid, { row: 2, col: 0 }, { color: 'red', position: { row: 2, col: 0 } });
-    // Point-down blue at row 3-5
+    setBall(grid, { row: 2, col: 1 }, { color: 'red', position: { row: 2, col: 1 } });
+    // Point-down blue: odd apex row 3 col 7, base row 5 cols 6-8
     setBall(grid, { row: 3, col: 7 }, { color: 'blue', position: { row: 3, col: 7 } });
     setBall(grid, { row: 4, col: 7 }, { color: 'blue', position: { row: 4, col: 7 } });
     setBall(grid, { row: 4, col: 8 }, { color: 'blue', position: { row: 4, col: 8 } });
+    setBall(grid, { row: 5, col: 6 }, { color: 'blue', position: { row: 5, col: 6 } });
     setBall(grid, { row: 5, col: 7 }, { color: 'blue', position: { row: 5, col: 7 } });
     setBall(grid, { row: 5, col: 8 }, { color: 'blue', position: { row: 5, col: 8 } });
-    setBall(grid, { row: 5, col: 9 }, { color: 'blue', position: { row: 5, col: 9 } });
     const matches = findPyramid(grid);
     expect(matches.length).toBeGreaterThanOrEqual(1);
   });

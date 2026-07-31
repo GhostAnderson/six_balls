@@ -65,9 +65,11 @@ io.on('connection', (socket) => {
     if (!room) return;
 
     if (roomManager.isAllReady(room.code)) {
-      const gameState = createInitialGameState();
+      const gameState = createInitialGameState(room.players[0], room.players[1]);
       room.gameState = gameState;
-      io.to(room.code).emit('gameStart', { gameState });
+      for (const [sockId, pid] of room.socketToPlayer) {
+        io.to(sockId).emit('gameStart', { gameState, playerId: pid });
+      }
     }
   });
 

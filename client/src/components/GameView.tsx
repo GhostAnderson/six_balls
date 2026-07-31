@@ -1,9 +1,10 @@
 import type { GameState, PlayerState, Attack } from '@six-balls/shared';
-import { getPieceBallPositions } from '@six-balls/shared';
 import Board from './Board';
+import type { LocalGameEngine } from '../game/localGame';
+import { NEON_CYAN, NEON_MAGENTA, TEXT_DIM } from '../themes/starfield';
 
 const BALL_HEX: Record<string, string> = {
-  red: '#ff3366', purple: '#8833ff', yellow: '#ffbb00', blue: '#3366ff', green: '#22bb55',
+  red: '#ff3355', purple: '#c44dff', yellow: '#ffb020', blue: '#3b7dff', green: '#3ed44e',
 };
 
 function MiniDot({ color, size = 7 }: { color: string; size?: number }) {
@@ -11,28 +12,29 @@ function MiniDot({ color, size = 7 }: { color: string; size?: number }) {
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
-      background: base, border: '1.5px solid white',
-      boxShadow: `0 1px 3px ${base}88`,
+      background: `radial-gradient(circle at 32% 30%, #ffffffcc, ${base} 60%)`,
+      boxShadow: `0 0 ${Math.max(4, size / 2)}px ${base}aa`,
       flexShrink: 0,
     }} />
   );
 }
 
 function NextPiecePreview({ nextPiece }: { nextPiece: PlayerState['nextPiece'] }) {
-  const positions = getPieceBallPositions(nextPiece);
-  const minRow = Math.min(...positions.map(p => p.row));
-  const minCol = Math.min(...positions.map(p => p.col));
-  const cells = positions.map((p, i) => ({
-    row: p.row - minRow, col: p.col - minCol, color: nextPiece.colors[i],
-  }));
-  const maxRow = Math.max(...cells.map(c => c.row));
-  const maxCol = Math.max(...cells.map(c => c.col));
-  const CELL = 16;
+  // Pieces always spawn at rotation 0: apex on top, two balls below,
+  // packed as an equilateral triangle (bottom pair touching, apex in the notch).
+  const D = 16;           // ball diameter
+  const ROW = D * 0.87;   // hex-packed vertical spacing
+  const [apex, right, left] = nextPiece.colors;
+  const balls = [
+    { color: apex, x: D / 2, y: 0 },
+    { color: left, x: 0, y: ROW },
+    { color: right, x: D, y: ROW },
+  ];
   return (
-    <div style={{ position: 'relative', width: (maxCol + 1) * CELL + 8, height: (maxRow + 1) * CELL + 8, margin: '0 auto' }}>
-      {cells.map((c, i) => (
-        <div key={i} style={{ position: 'absolute', left: c.col * CELL, top: (maxRow - c.row) * CELL }}>
-          <MiniDot color={c.color} size={12} />
+    <div style={{ position: 'relative', width: D * 2, height: ROW + D, margin: '0 auto' }}>
+      {balls.map((b, i) => (
+        <div key={i} style={{ position: 'absolute', left: b.x, top: b.y }}>
+          <MiniDot color={b.color} size={D} />
         </div>
       ))}
     </div>
@@ -42,7 +44,7 @@ function NextPiecePreview({ nextPiece }: { nextPiece: PlayerState['nextPiece'] }
 function AttackDiagram({ attack }: { attack: Attack | null }) {
   if (!attack) {
     return (
-      <div style={{ textAlign: 'center', color: '#ddd', fontSize: '11px', padding: '8px 0' }}>
+      <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.35)', fontSize: '11px', padding: '8px 0' }}>
         · · · <br />safe!
       </div>
     );
@@ -59,14 +61,14 @@ function AttackDiagram({ attack }: { attack: Attack | null }) {
           </div>
           <div style={{ display: 'flex', gap: '2px' }}>
             <MiniDot color="red" />
-            <div style={{ width: 7, height: 7, borderRadius: '50%', border: '1px dashed #ff336688', flexShrink: 0 }} />
+            <div style={{ width: 7, height: 7, borderRadius: '50%', border: '1px dashed #ff335588', flexShrink: 0 }} />
             <MiniDot color="red" />
           </div>
           <div style={{ display: 'flex', gap: '2px' }}>
             <MiniDot color="red" /><MiniDot color="red" />
           </div>
         </div>
-        <div style={{ fontSize: '8px', color: '#cc88aa' }}>{COUNT_LABEL}</div>
+        <div style={{ fontSize: '8px', color: TEXT_DIM }}>{COUNT_LABEL}</div>
       </div>
     );
   }
@@ -82,7 +84,7 @@ function AttackDiagram({ attack }: { attack: Attack | null }) {
             {(['green', 'red', 'blue', 'green', 'yellow'] as const).map((c, i) => <MiniDot key={i} color={c} />)}
           </div>
         </div>
-        <div style={{ fontSize: '8px', color: '#cc88aa' }}>{COUNT_LABEL}</div>
+        <div style={{ fontSize: '8px', color: TEXT_DIM }}>{COUNT_LABEL}</div>
       </div>
     );
   }
@@ -95,7 +97,7 @@ function AttackDiagram({ attack }: { attack: Attack | null }) {
           <div style={{ display: 'flex', gap: '2px' }}><MiniDot color="yellow" /><MiniDot color="yellow" /></div>
           <div style={{ display: 'flex', gap: '2px' }}><MiniDot color="yellow" /><MiniDot color="yellow" /><MiniDot color="yellow" /></div>
         </div>
-        <div style={{ fontSize: '8px', color: '#cc88aa' }}>{COUNT_LABEL}</div>
+        <div style={{ fontSize: '8px', color: TEXT_DIM }}>{COUNT_LABEL}</div>
       </div>
     );
   }
@@ -103,21 +105,29 @@ function AttackDiagram({ attack }: { attack: Attack | null }) {
   return null;
 }
 
-function HudColumn({ player, label }: { player: PlayerState; label: string }) {
+const PANEL: React.CSSProperties = {
+  background: 'rgba(10,16,50,0.55)',
+  borderRadius: '12px',
+  border: '1.5px solid rgba(255,255,255,0.55)',
+  padding: '8px 6px',
+  boxShadow: '0 0 14px rgba(120,160,255,0.18)',
+};
+
+function HudColumn({ player, label, accent }: { player: PlayerState; label: string; accent: string }) {
   const nextAttack = player.attackQueue[0] ?? null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '88px', flexShrink: 0 }}>
-      <div style={{ fontWeight: 700, fontSize: '11px', color: '#ff4499', letterSpacing: '1px', textAlign: 'center' }}>
+      <div style={{ fontWeight: 800, fontSize: '12px', color: accent, letterSpacing: '2px', textAlign: 'center', textShadow: `0 0 8px ${accent}` }}>
         {label}
       </div>
 
-      <div style={{ background: 'white', borderRadius: '10px', border: '2px solid #ffb3d1', padding: '8px 6px', boxShadow: '0 2px 8px rgba(255,100,150,0.12)' }}>
-        <div style={{ fontSize: '9px', color: '#cc88aa', fontWeight: 700, letterSpacing: '1px', textAlign: 'center', marginBottom: 6 }}>NEXT</div>
+      <div style={PANEL}>
+        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.8)', fontWeight: 700, letterSpacing: '1px', textAlign: 'center', marginBottom: 6 }}>NEXT</div>
         <NextPiecePreview nextPiece={player.nextPiece} />
       </div>
 
-      <div style={{ background: 'white', borderRadius: '10px', border: nextAttack ? '2px solid #cc99ff' : '2px dashed #eee', padding: '8px 6px', boxShadow: nextAttack ? '0 2px 8px rgba(136,51,255,0.12)' : 'none' }}>
-        <div style={{ fontSize: '9px', color: '#cc88aa', fontWeight: 700, letterSpacing: '1px', textAlign: 'center', marginBottom: 6 }}>INCOMING</div>
+      <div style={{ ...PANEL, border: nextAttack ? `1.5px solid ${NEON_MAGENTA}` : '1.5px dashed rgba(255,255,255,0.25)', boxShadow: nextAttack ? `0 0 14px ${NEON_MAGENTA}55` : 'none' }}>
+        <div style={{ fontSize: '9px', color: 'rgba(255,255,255,0.8)', fontWeight: 700, letterSpacing: '1px', textAlign: 'center', marginBottom: 6 }}>INCOMING</div>
         <AttackDiagram attack={nextAttack} />
       </div>
     </div>
@@ -127,28 +137,35 @@ function HudColumn({ player, label }: { player: PlayerState; label: string }) {
 interface GameViewProps {
   gameState: GameState;
   myPlayerId: string;
+  /** Continuous local engine (local 2P mode); enables free-space piece rendering. */
+  localEngine?: LocalGameEngine | null;
 }
 
-export default function GameView({ gameState, myPlayerId }: GameViewProps) {
+export default function GameView({ gameState, myPlayerId, localEngine = null }: GameViewProps) {
   const myIndex = gameState.players.findIndex(p => p.id === myPlayerId);
-  const myPlayer = gameState.players[myIndex !== -1 ? myIndex : 0];
-  const opponent = gameState.players[myIndex === 0 ? 1 : 0];
+  const myIdx = (myIndex !== -1 ? myIndex : 0) as 0 | 1;
+  const oppIdx = (myIdx === 0 ? 1 : 0) as 0 | 1;
+  const myPlayer = gameState.players[myIdx];
+  const opponent = gameState.players[oppIdx];
   const startTime = gameState.startTime;
 
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', gap: '12px', padding: '16px 24px', flexWrap: 'wrap' }}>
 
-      <HudColumn player={myPlayer} label="YOU" />
+      <HudColumn player={myPlayer} label={localEngine ? 'P1' : 'YOU'} accent={NEON_CYAN} />
 
       <Board
         grid={myPlayer.grid}
         currentPiece={myPlayer.currentPiece}
         startTime={startTime}
         isMyBoard={true}
+        falling={localEngine ? () => localEngine.getFalling(myIdx) : null}
+        landing={localEngine ? localEngine.landings[myIdx] : null}
+        pendingAttacks={myPlayer.attackQueue}
       />
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch', padding: '0 4px' }}>
-        <div style={{ fontWeight: 900, fontSize: '20px', color: '#cc88aa', letterSpacing: '2px' }}>VS</div>
+        <div style={{ fontWeight: 900, fontSize: '20px', color: 'rgba(255,255,255,0.85)', letterSpacing: '2px', textShadow: '0 0 12px rgba(255,255,255,0.6)' }}>VS</div>
       </div>
 
       <Board
@@ -156,9 +173,12 @@ export default function GameView({ gameState, myPlayerId }: GameViewProps) {
         currentPiece={opponent.currentPiece}
         startTime={startTime}
         isMyBoard={false}
+        falling={localEngine ? () => localEngine.getFalling(oppIdx) : null}
+        landing={localEngine ? localEngine.landings[oppIdx] : null}
+        pendingAttacks={opponent.attackQueue}
       />
 
-      <HudColumn player={opponent} label="OPP" />
+      <HudColumn player={opponent} label={localEngine ? 'P2' : 'OPP'} accent={NEON_MAGENTA} />
 
     </div>
   );

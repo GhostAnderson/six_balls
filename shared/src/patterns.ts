@@ -20,11 +20,13 @@ function findConnectedGroup(
     const currentKey = key(current);
 
     if (visited.has(currentKey)) continue;
-    visited.add(currentKey);
 
     const currentBall = getBall(grid, current);
+    // Only same-colored balls join the group and get marked visited;
+    // rejected border cells must stay available for their own group's scan.
     if (!currentBall || currentBall.color !== color) continue;
 
+    visited.add(currentKey);
     group.push(current);
 
     for (const neighbor of getNeighbors(current)) {
@@ -198,15 +200,15 @@ function getAllNeighborPositions(center: GridPosition): (GridPosition | null)[] 
  * given the base-left corner (baseRow, baseCol).  The returned positions are
  * hex-neighbor aware, adjusting for row parity.
  *
- * Even baseRow:
+ * Even baseRow (base x: c, c+1, c+2):
  *   row+0 (even): ▌c …… c+1 …… c+2▐
- *   row+1 (odd):     ▌c …… c+1▐
- *   row+2 (even):       ▌c▐
+ *   row+1 (odd):    ▌c …… c+1▐        (x: c+0.5, c+1.5)
+ *   row+2 (even):      ▌c+1▐          (x: c+1, centered)
  *
- * Odd baseRow:
- *   row+0 (odd):    ▌c …… c+1 …… c+2▐
- *   row+1 (even):      ▌c+1 …… c+2▐
- *   row+2 (odd):          ▌c+2▐
+ * Odd baseRow (base x: c+0.5, c+1.5, c+2.5):
+ *   row+0 (odd):  ▌c …… c+1 …… c+2▐
+ *   row+1 (even):   ▌c+1 …… c+2▐      (x: c+1, c+2)
+ *   row+2 (odd):       ▌c+1▐          (x: c+1.5, centered)
  */
 function getPointUpPyramid(baseRow: number, baseCol: number): GridPosition[] | null {
   const isEven = baseRow % 2 === 0;
@@ -217,7 +219,7 @@ function getPointUpPyramid(baseRow: number, baseCol: number): GridPosition[] | n
         { row: baseRow, col: baseCol + 2 },
         { row: baseRow + 1, col: baseCol },
         { row: baseRow + 1, col: baseCol + 1 },
-        { row: baseRow + 2, col: baseCol },
+        { row: baseRow + 2, col: baseCol + 1 },
       ]
     : [
         { row: baseRow, col: baseCol },
@@ -225,7 +227,7 @@ function getPointUpPyramid(baseRow: number, baseCol: number): GridPosition[] | n
         { row: baseRow, col: baseCol + 2 },
         { row: baseRow + 1, col: baseCol + 1 },
         { row: baseRow + 1, col: baseCol + 2 },
-        { row: baseRow + 2, col: baseCol + 2 },
+        { row: baseRow + 2, col: baseCol + 1 },
       ];
   if (positions.some(p => !isValidPosition(p))) return null;
   return positions;
@@ -235,15 +237,15 @@ function getPointUpPyramid(baseRow: number, baseCol: number): GridPosition[] | n
  * Compute the 6 positions of a point-down pyramid (apex at bottom, base
  * upward), given the bottom apex (apexRow, apexCol).  Hex-neighbor aware.
  *
- * Even apexRow:
- *   row+0 (even):       ▌c▐
- *   row+1 (odd):      ▌c-1 …… c▐
- *   row+2 (even):  ▌c-2 …… c-1 …… c▐
+ * Even apexRow (apex x: c):
+ *   row+0 (even):        ▌c▐
+ *   row+1 (odd):     ▌c-1 …… c▐        (x: c-0.5, c+0.5)
+ *   row+2 (even): ▌c-1 …… c …… c+1▐    (x: c-1, c, c+1, centered)
  *
- * Odd apexRow:
- *   row+0 (odd):        ▌c▐
- *   row+1 (even):      ▌c …… c+1▐
- *   row+2 (odd):   ▌c-1 …… c …… c+1▐
+ * Odd apexRow (apex x: c+0.5):
+ *   row+0 (odd):         ▌c▐
+ *   row+1 (even):     ▌c …… c+1▐       (x: c, c+1)
+ *   row+2 (odd):  ▌c-1 …… c …… c+1▐    (x: c-0.5, c+0.5, c+1.5, centered)
  */
 function getPointDownPyramid(apexRow: number, apexCol: number): GridPosition[] | null {
   const isEven = apexRow % 2 === 0;
@@ -252,9 +254,9 @@ function getPointDownPyramid(apexRow: number, apexCol: number): GridPosition[] |
         { row: apexRow, col: apexCol },
         { row: apexRow + 1, col: apexCol - 1 },
         { row: apexRow + 1, col: apexCol },
-        { row: apexRow + 2, col: apexCol - 2 },
         { row: apexRow + 2, col: apexCol - 1 },
         { row: apexRow + 2, col: apexCol },
+        { row: apexRow + 2, col: apexCol + 1 },
       ]
     : [
         { row: apexRow, col: apexCol },

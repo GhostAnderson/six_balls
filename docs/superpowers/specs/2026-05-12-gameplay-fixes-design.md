@@ -80,7 +80,7 @@ Server generates a precomputed piece sequence when the game starts. Uses `gameSt
 
 - Add seed-based PRNG to shared package: `shared/src/rng.ts`
   - `export function createRNG(seed: number)` returns `{ next(): number }`
-  - Uses a simple mulberry32 deterministic algorithm
+  - Uses a simple mulberry32 or similar deterministic algorithm
 - Move piece generation to server: `server/src/GameEngine.ts`
   - `createInitialGameState` creates an RNG, generates first 100 pieces
   - Stores `pieceSequence: [BallColor, BallColor, BallColor][]` in `GameState`
@@ -98,11 +98,9 @@ pieceIndex: number;  // current position in sequence
 
 ## 4. Next Piece Preview
 
-### What it shows
-
-Shows the piece that will appear **after** the current falling piece lands (i.e., `player.nextPiece` from `PlayerState`). This is the NOT-yet-falling piece — the upcoming one waiting in queue.
-
 ### Layout
+
+Show a small preview of the upcoming piece next to each player's board:
 
 ```
 ┌─────────┬─────────────┐
@@ -215,7 +213,7 @@ Draw a visible container border around the play area:
 
 ## 8. Pyramid Detection Verification
 
-Both point-up and point-down pyramids already exist in `shared/src/patterns.ts` via `getPointUpPyramid()` and `getPointDownPyramid()`. `findPyramid()` checks both orientations. Verify with cross-row test cases.
+Both point-up and point-down pyramids already exist in `shared/src/patterns.ts` via `getPointUpPyramid()` and `getPointDownPyramid()`. `findPyramid()` checks both orientations. The issue may be that tests only cover row 0 (bottom of grid) — verify with additional test cases at various row positions.
 
 ### Action
 
@@ -230,7 +228,7 @@ Both point-up and point-down pyramids already exist in `shared/src/patterns.ts` 
 |------|--------|---------|
 | `shared/src/rng.ts` | NEW | Seed-based PRNG for deterministic piece sequences |
 | `shared/src/rng.test.ts` | NEW | RNG tests |
-| `shared/src/types.ts` | MODIFY | Add `pieceIndex` to GameState |
+| `shared/src/types.ts` | MODIFY | Add `pieceIndex` to GameState, `theme` to PlayerState |
 | `shared/src/piece.ts` | MODIFY | Accept external RNG in createPieceAtSpawn |
 | `server/src/GameEngine.ts` | MODIFY | Use PRNG for piece sequence, generate in createInitialGameState |
 | `client/src/hooks/useAutoDrop.ts` | NEW | Auto-fall timer hook |
@@ -242,7 +240,8 @@ Both point-up and point-down pyramids already exist in `shared/src/patterns.ts` 
 | `client/src/themes/themes.ts` | NEW | Theme definitions |
 | `client/src/components/Menu.tsx` | MODIFY | Add "Local Play" button |
 | `client/src/App.tsx` | MODIFY | Local play mode, auto-drop, theme state |
-| `shared/src/patterns.test.ts` | MODIFY | Add pyramid cross-row tests |
+| `shared/src/game-engine.ts` | MODIFY | Add getSpeedInterval helper |
+| `shared/src/patterns.ts` | MODIFY | Add pyramid cross-row tests |
 
 ---
 
@@ -254,4 +253,4 @@ Both point-up and point-down pyramids already exist in `shared/src/patterns.ts` 
 - **Hex rendering:** Equilateral triangles render correctly at all rotations
 - **Bubble animation:** Cleared balls animate before removal
 - **Theme:** Switching theme updates both boards immediately
-- **Pyramid:** Both orientations detected at various row positions
+- **Pyramid:** Both orientations detected at various row positions, with even/odd parity

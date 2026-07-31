@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { LocalGameEngine, type PlayerInput } from '../game/localGame';
-import { getSpeedInterval, type GameState } from '@six-balls/shared';
+import { LocalGameEngine, type HeldControl } from '../game/localGame';
+import type { GameState } from '@six-balls/shared';
 
 export function useLocalGame() {
   const engRef = useRef<LocalGameEngine | null>(null);
@@ -9,35 +9,49 @@ export function useLocalGame() {
   const start = useCallback(() => {
     const e = new LocalGameEngine();
     engRef.current = e;
-    setGS({ ...e.state });
-  }, []);
-
-  const input = useCallback((pi: 0 | 1, act: PlayerInput) => {
-    const e = engRef.current;
-    if (!e) return;
-    e.handleInput(pi, act);
+    // Dev/testing hook: allows inspecting or poking the engine from the console
+    (window as unknown as { __sixballs?: LocalGameEngine }).__sixballs = e;
     setGS({ ...e.state });
   }, []);
 
   const stop = useCallback(() => { engRef.current = null; setGS(null); }, []);
 
+  const setControl = useCallback((pi: 0 | 1, control: HeldControl, pressed: boolean) => {
+    engRef.current?.setControl(pi, control, pressed);
+  }, []);
+
+  const rotate = useCallback((pi: 0 | 1) => {
+    const e = engRef.current;
+    if (!e) return;
+    e.rotate(pi);
+  }, []);
+
+  const hardDrop = useCallback((pi: 0 | 1) => {
+    const e = engRef.current;
+    if (!e) return;
+    e.hardDrop(pi);
+    setGS({ ...e.state });
+  }, []);
+
+  // 60fps simulation loop; React state only updates on discrete changes (locks)
   useEffect(() => {
     if (!gs || gs.phase !== 'playing') return;
-    const startTime = gs.startTime!;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    function sched(pi: 0 | 1) {
-      const iv = getSpeedInterval(Date.now() - startTime);
-      timers.push(setTimeout(() => {
-        const e = engRef.current;
-        if (!e || e.state.phase !== 'playing') return;
-        e.handleInput(pi, 'softDrop');
+    let raf = 0;
+    let lastVersion = engRef.current?.version ?? 0;
+    const loop = () => {
+      const e = engRef.current;
+      if (!e) return;
+      e.tick(Date.now());
+      if (e.version !== lastVersion) {
+        lastVersion = e.version;
         setGS({ ...e.state });
-        if (e.state.phase === 'playing') sched(pi);
-      }, iv));
-    }
-    sched(0); sched(1);
-    return () => timers.forEach(t => clearTimeout(t));
+      }
+      if (e.state.phase === 'playing') raf = requestAnimationFrame(loop);
+      else setGS({ ...e.state });
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
   }, [gs?.phase === 'playing', gs?.startTime]);
 
-  return { gameState: gs, startGame: start, handleInput: input, stopGame: stop };
+  return { gameState: gs, engineRef: engRef, startGame: start, stopGame: stop, setControl, rotate, hardDrop };
 }

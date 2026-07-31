@@ -1,4 +1,4 @@
-import type { Ball, GridPosition } from './types';
+import type { Ball, BallColor, GridPosition } from './types';
 import {
   createEmptyGrid,
   getBall,
@@ -9,7 +9,10 @@ import {
 } from './grid';
 import { GRID_HEIGHT } from './types';
 
-function findFallDestination(grid: Grid, pos: GridPosition): GridPosition {
+/**
+ * Find where a ball at `pos` would come to rest under hex gravity.
+ */
+export function findFallDestination(grid: Grid, pos: GridPosition): GridPosition {
   let current = pos;
 
   while (true) {
@@ -46,11 +49,18 @@ function findFallDestination(grid: Grid, pos: GridPosition): GridPosition {
   }
 }
 
+/** A ball displacement produced by gravity, preserving ball identity. */
+export interface BallMove {
+  from: GridPosition;
+  to: GridPosition;
+  color: BallColor;
+}
+
 /**
- * Apply gravity to the grid, making all balls fall to stable positions.
- * Returns a new grid with balls in their final positions.
+ * Apply gravity and report which ball moved where (identity-preserving),
+ * so the renderer can animate each ball along its own path.
  */
-export function applyGravity(grid: Grid): Grid {
+export function settleWithMoves(grid: Grid): { grid: Grid; moves: BallMove[] } {
   const newGrid = createEmptyGrid();
   const balls: Ball[] = [];
 
@@ -67,11 +77,22 @@ export function applyGravity(grid: Grid): Grid {
   // Sort balls by row (process bottom balls first for right-side priority)
   balls.sort((a, b) => a.position.row - b.position.row);
 
+  const moves: BallMove[] = [];
   for (const ball of balls) {
     const dest = findFallDestination(newGrid, ball.position);
-    const newBall: Ball = { color: ball.color, position: dest };
-    setBall(newGrid, dest, newBall);
+    setBall(newGrid, dest, { color: ball.color, position: dest });
+    if (dest.row !== ball.position.row || dest.col !== ball.position.col) {
+      moves.push({ from: ball.position, to: dest, color: ball.color });
+    }
   }
 
-  return newGrid;
+  return { grid: newGrid, moves };
+}
+
+/**
+ * Apply gravity to the grid, making all balls fall to stable positions.
+ * Returns a new grid with balls in their final positions.
+ */
+export function applyGravity(grid: Grid): Grid {
+  return settleWithMoves(grid).grid;
 }

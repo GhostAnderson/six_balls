@@ -5,6 +5,16 @@ import GameView from './components/GameView';
 import { useLocalGame } from './hooks/useLocalGame';
 import { useAutoDrop } from './hooks/useAutoDrop';
 import type { GameState } from '@six-balls/shared';
+import { STARFIELD_BG, NEON_CYAN, NEON_MAGENTA, TEXT_DIM } from './themes/starfield';
+
+const PAGE: React.CSSProperties = { minHeight: '100vh', ...STARFIELD_BG, fontFamily: 'system-ui, sans-serif' };
+const TITLE: React.CSSProperties = { margin: 0, fontSize: '26px', fontWeight: 900, color: 'white', letterSpacing: '3px', textShadow: `0 0 14px ${NEON_CYAN}, 0 0 30px ${NEON_MAGENTA}` };
+const HEADER: React.CSSProperties = { position: 'relative', textAlign: 'center', padding: '16px 0 12px', borderBottom: '1px solid rgba(255,255,255,0.12)' };
+const MENU_BTN: React.CSSProperties = { position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', padding: '7px 16px', fontSize: '13px', fontWeight: 700, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: '16px', color: 'white', cursor: 'pointer' };
+const FOOTER: React.CSSProperties = { textAlign: 'center', padding: '12px 0 16px', borderTop: '1px solid rgba(255,255,255,0.12)', color: TEXT_DIM, fontSize: '13px' };
+const OVERLAY_CARD: React.CSSProperties = { background: 'rgba(12,18,56,0.95)', borderRadius: '20px', padding: '40px 56px', textAlign: 'center', border: `1.5px solid rgba(255,255,255,0.4)`, boxShadow: `0 0 40px ${NEON_MAGENTA}55, 0 8px 40px rgba(0,0,0,0.5)` };
+const PRIMARY_BTN: React.CSSProperties = { padding: '12px 28px', fontSize: '15px', fontWeight: 700, background: `linear-gradient(135deg, ${NEON_CYAN}, ${NEON_MAGENTA})`, border: 'none', borderRadius: '20px', color: '#081030', cursor: 'pointer', boxShadow: `0 0 18px ${NEON_CYAN}66` };
+const GHOST_BTN: React.CSSProperties = { padding: '12px 28px', fontSize: '15px', fontWeight: 700, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: '20px', color: 'white', cursor: 'pointer' };
 
 type AppScreen = 'menu' | 'waiting' | 'playing' | 'localPlay';
 
@@ -14,7 +24,7 @@ export default function App() {
   const [joinError, setJoinError] = useState<string | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [playerId, setPlayerId] = useState<string>('');
-  const { gameState: localGameState, startGame: startLocalGame, handleInput: handleLocalInput, stopGame: stopLocalGame } = useLocalGame();
+  const { gameState: localGameState, engineRef: localEngineRef, startGame: startLocalGame, stopGame: stopLocalGame, setControl, rotate, hardDrop } = useLocalGame();
 
   useEffect(() => {
     const socket = getSocket();
@@ -71,28 +81,45 @@ export default function App() {
     startLocalGame();
   }, [startLocalGame]);
 
-  // Local keyboard controls
+  // Local keyboard controls: held keys move continuously; rotate/drop are taps
   useEffect(() => {
     if (screen !== 'localPlay') return;
-    const hkd = (e: KeyboardEvent) => {
+    const down = (e: KeyboardEvent) => {
       switch (e.key) {
-        case 'ArrowLeft': e.preventDefault(); handleLocalInput(0, 'moveLeft'); break;
-        case 'ArrowRight': e.preventDefault(); handleLocalInput(0, 'moveRight'); break;
-        case 'ArrowUp': e.preventDefault(); handleLocalInput(0, 'rotate'); break;
-        case 'ArrowDown': e.preventDefault(); handleLocalInput(0, 'softDrop'); break;
-        case ' ': e.preventDefault(); handleLocalInput(0, 'hardDrop'); break;
+        case 'ArrowLeft': e.preventDefault(); setControl(0, 'left', true); break;
+        case 'ArrowRight': e.preventDefault(); setControl(0, 'right', true); break;
+        case 'ArrowDown': e.preventDefault(); setControl(0, 'soft', true); break;
+        case 'ArrowUp': e.preventDefault(); if (!e.repeat) rotate(0); break;
+        case ' ': e.preventDefault(); if (!e.repeat) hardDrop(0); break;
       }
       switch (e.code) {
-        case 'KeyA': e.preventDefault(); handleLocalInput(1, 'moveLeft'); break;
-        case 'KeyD': e.preventDefault(); handleLocalInput(1, 'moveRight'); break;
-        case 'KeyW': e.preventDefault(); handleLocalInput(1, 'rotate'); break;
-        case 'KeyS': e.preventDefault(); handleLocalInput(1, 'softDrop'); break;
-        case 'ShiftLeft': case 'ShiftRight': e.preventDefault(); handleLocalInput(1, 'hardDrop'); break;
+        case 'KeyA': setControl(1, 'left', true); break;
+        case 'KeyD': setControl(1, 'right', true); break;
+        case 'KeyS': setControl(1, 'soft', true); break;
+        case 'KeyW': if (!e.repeat) rotate(1); break;
+        case 'ShiftLeft': case 'ShiftRight': if (!e.repeat) hardDrop(1); break;
       }
     };
-    window.addEventListener('keydown', hkd);
-    return () => { window.removeEventListener('keydown', hkd); stopLocalGame(); };
-  }, [screen, handleLocalInput, stopLocalGame]);
+    const up = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'ArrowLeft': setControl(0, 'left', false); break;
+        case 'ArrowRight': setControl(0, 'right', false); break;
+        case 'ArrowDown': setControl(0, 'soft', false); break;
+      }
+      switch (e.code) {
+        case 'KeyA': setControl(1, 'left', false); break;
+        case 'KeyD': setControl(1, 'right', false); break;
+        case 'KeyS': setControl(1, 'soft', false); break;
+      }
+    };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      stopLocalGame();
+    };
+  }, [screen, setControl, rotate, hardDrop, stopLocalGame]);
 
   const backToMenu = useCallback(() => { setScreen('menu'); setGameState(null); setRoomCode(null); stopLocalGame(); }, [stopLocalGame]);
   const rematch = useCallback(() => { startLocalGame(); }, [startLocalGame]);
@@ -102,17 +129,17 @@ export default function App() {
     const isEnded = gameState?.phase === 'ended';
     const didWin = isEnded && gameState?.winner === playerId;
     return (
-      <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #fff5fb, #f5f0ff)', fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ position: 'relative', textAlign: 'center', padding: '16px 0 12px', borderBottom: '1px solid #f0d0e8' }}>
-          <h1 style={{ margin: 0, fontSize: '26px', fontWeight: 900, color: '#ff4499', letterSpacing: '2px' }}>SIX BALLS PUZZLE</h1>
-          <button onClick={backToMenu} style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', padding: '7px 16px', fontSize: '13px', fontWeight: 700, background: '#f0e0f0', border: 'none', borderRadius: '16px', color: '#8833ff', cursor: 'pointer' }}>
+      <div style={PAGE}>
+        <div style={HEADER}>
+          <h1 style={TITLE}>SIX BALLS PUZZLE</h1>
+          <button onClick={backToMenu} style={MENU_BTN}>
             Menu
           </button>
         </div>
         {screen === 'waiting' ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '48px' }}>
-            <p style={{ color: '#cc88aa', fontSize: '18px' }}>Opponent joined! Get ready...</p>
-            <button onClick={handleReady} style={{ padding: '12px 32px', fontSize: '16px', fontWeight: 700, background: 'linear-gradient(135deg, #ff4499, #cc33ff)', border: 'none', borderRadius: '24px', color: 'white', cursor: 'pointer', boxShadow: '0 3px 12px rgba(255,50,150,0.4)' }}>
+            <p style={{ color: TEXT_DIM, fontSize: '18px' }}>Opponent joined! Get ready...</p>
+            <button onClick={handleReady} style={{ ...PRIMARY_BTN, padding: '12px 32px', fontSize: '16px', borderRadius: '24px' }}>
               READY
             </button>
           </div>
@@ -120,19 +147,19 @@ export default function App() {
           <div style={{ position: 'relative' }}>
             <GameView gameState={gameState} myPlayerId={playerId} />
             {isEnded && (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-                <div style={{ background: 'white', borderRadius: '20px', padding: '40px 56px', textAlign: 'center', boxShadow: '0 8px 40px rgba(0,0,0,0.3)' }}>
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,10,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+                <div style={OVERLAY_CARD}>
                   <div style={{ fontSize: '48px', marginBottom: '12px' }}>{didWin ? '🎉' : '😢'}</div>
-                  <div style={{ fontSize: '32px', fontWeight: 900, color: didWin ? '#ff4499' : '#8833ff', marginBottom: '24px' }}>{didWin ? 'YOU WIN' : 'YOU LOSE'}</div>
-                  <button onClick={backToMenu} style={{ padding: '12px 28px', fontSize: '15px', fontWeight: 700, background: 'linear-gradient(135deg, #ff4499, #cc33ff)', border: 'none', borderRadius: '20px', color: 'white', cursor: 'pointer' }}>
+                  <div style={{ fontSize: '32px', fontWeight: 900, color: 'white', textShadow: `0 0 16px ${didWin ? NEON_CYAN : NEON_MAGENTA}`, marginBottom: '24px' }}>{didWin ? 'YOU WIN' : 'YOU LOSE'}</div>
+                  <button onClick={backToMenu} style={PRIMARY_BTN}>
                     Back to Menu
                   </button>
                 </div>
               </div>
             )}
           </div>
-        ) : <p style={{ textAlign: 'center', padding: '48px', color: '#cc88aa' }}>Loading...</p>}
-        <div style={{ textAlign: 'center', padding: '12px 0 16px', borderTop: '1px solid #f0d0e8', color: '#cc88aa', fontSize: '13px' }}>
+        ) : <p style={{ textAlign: 'center', padding: '48px', color: TEXT_DIM }}>Loading...</p>}
+        <div style={FOOTER}>
           ← → move &nbsp;·&nbsp; ↑ rotate &nbsp;·&nbsp; ↓ soft drop &nbsp;·&nbsp; Space drop
         </div>
       </div>
@@ -144,26 +171,26 @@ export default function App() {
     const ls = localGameState;
     const isEnded = ls?.phase === 'ended';
     return (
-      <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #fff5fb, #f5f0ff)', fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ position: 'relative', textAlign: 'center', padding: '16px 0 12px', borderBottom: '1px solid #f0d0e8' }}>
-          <h1 style={{ margin: 0, fontSize: '26px', fontWeight: 900, color: '#ff4499', letterSpacing: '2px' }}>SIX BALLS PUZZLE</h1>
-          <button onClick={backToMenu} style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', padding: '7px 16px', fontSize: '13px', fontWeight: 700, background: '#f0e0f0', border: 'none', borderRadius: '16px', color: '#8833ff', cursor: 'pointer' }}>
+      <div style={PAGE}>
+        <div style={HEADER}>
+          <h1 style={TITLE}>SIX BALLS PUZZLE</h1>
+          <button onClick={backToMenu} style={MENU_BTN}>
             Menu
           </button>
         </div>
         {ls ? (
           <div style={{ position: 'relative' }}>
-            <GameView gameState={ls} myPlayerId="player1" />
+            <GameView gameState={ls} myPlayerId="player1" localEngine={localEngineRef.current} />
             {isEnded && (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-                <div style={{ background: 'white', borderRadius: '20px', padding: '40px 56px', textAlign: 'center', boxShadow: '0 8px 40px rgba(0,0,0,0.3)' }}>
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,10,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+                <div style={OVERLAY_CARD}>
                   <div style={{ fontSize: '48px', marginBottom: '12px' }}>{ls.winner === 'player1' ? '🎉' : '😢'}</div>
-                  <div style={{ fontSize: '32px', fontWeight: 900, color: '#ff4499', marginBottom: '24px' }}>{ls.winner === 'player1' ? 'P1 WINS' : 'P2 WINS'}</div>
+                  <div style={{ fontSize: '32px', fontWeight: 900, color: 'white', textShadow: `0 0 16px ${ls.winner === 'player1' ? NEON_CYAN : NEON_MAGENTA}`, marginBottom: '24px' }}>{ls.winner === 'player1' ? 'P1 WINS' : 'P2 WINS'}</div>
                   <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                    <button onClick={rematch} style={{ padding: '12px 28px', fontSize: '15px', fontWeight: 700, background: 'linear-gradient(135deg, #ff4499, #cc33ff)', border: 'none', borderRadius: '20px', color: 'white', cursor: 'pointer' }}>
+                    <button onClick={rematch} style={PRIMARY_BTN}>
                       Play Again
                     </button>
-                    <button onClick={backToMenu} style={{ padding: '12px 28px', fontSize: '15px', fontWeight: 700, background: '#f0e0f0', border: 'none', borderRadius: '20px', color: '#8833ff', cursor: 'pointer' }}>
+                    <button onClick={backToMenu} style={GHOST_BTN}>
                       Menu
                     </button>
                   </div>
@@ -171,8 +198,8 @@ export default function App() {
               </div>
             )}
           </div>
-        ) : <p style={{ textAlign: 'center', padding: '48px', color: '#cc88aa' }}>Starting...</p>}
-        <div style={{ textAlign: 'center', padding: '12px 0 16px', borderTop: '1px solid #f0d0e8', color: '#cc88aa', fontSize: '13px' }}>
+        ) : <p style={{ textAlign: 'center', padding: '48px', color: TEXT_DIM }}>Starting...</p>}
+        <div style={FOOTER}>
           P1: ← → ↑ ↓ Space &nbsp;·&nbsp; P2: A D W S Shift
         </div>
       </div>
